@@ -12,8 +12,7 @@ import torch
 import torch.nn as nn
 import torch.backends.cudnn as cudnn
 from torch.optim import lr_scheduler
-import seaborn as sns
-
+from tools.plot_tsne import plot_tsne
 from args import argument_parser, image_dataset_kwargs, optimizer_kwargs
 from torchreid.data.datamanager import ImageDataManager
 from torchreid import models
@@ -26,8 +25,7 @@ from torchreid.metrics.rank import evaluate_rank
 from torchreid.optim.optimizer import build_optimizer
 from torchreid.regularizers import get_regularizer
 import matplotlib.pyplot as plt
-from matplotlib import cm
-from sklearn.manifold import TSNE
+
 
 import logging
 
@@ -38,34 +36,6 @@ parser = argument_parser()
 args = parser.parse_args()
 
 os.environ['TORCH_HOME'] = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '.torch'))
-
-
-# plot feature layer
-def plot_with_labels(lowDWeights, labels):
-    plt.cla()
-    X, Y = lowDWeights[:, 0], lowDWeights[:, 1]
-    for x, y, s in zip(X, Y, labels):
-        c = cm.rainbow(int(255 * s / 9))
-        plt.text(x, y, s, backgroundcolor=c, fontsize=9)
-    plt.xlim(X.min(), X.max())
-    plt.ylim(Y.min(), Y.max())
-    plt.title('Visualize Feature Layer using t-SNE')
-    plt.show()
-    plt.pause(10000)
-
-
-def plot_tsne(gf, g_pids):
-    new_gf = np.asarray(gf)
-    tsne = TSNE(perplexity=30, n_components=2, init='pca', n_iter=5000)
-    X = []
-    Y = []
-    for index in range(new_gf.shape[0]):
-        if g_pids[index] in [1, 721, 156, 1317, 727, 521, 731, 92, 218, 94]:
-            X.append(new_gf[index, :])
-            Y.append(g_pids[index])
-    Y = np.asarray(Y)
-    low_dim_embs = tsne.fit_transform(X)
-    plot_with_labels(low_dim_embs, Y)
 
 
 def get_criterion(num_classes: int, use_gpu: bool, args):
