@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="PublishConfigData" autoUpload="Always" serverName="ddj2@43.249.193.233:20002">
+    <serverData>
+      <paths name="ddj2@43.249.193.233:20002">
+        <serverdata>
+          <mappings>
+            <mapping deploy="/media/ddj2/ce611f70-968b-4316-9547-9bc9cf931d32/remote_data/PycharmProjects/deep-person-reid-master" local="$PROJECT_DIR$" web="/" />
+          </mappings>
+        </serverdata>
+      </paths>
+    </serverData>
+    <option name="myAutoUpload" value="ALWAYS" />
+  </component>
+</project>
