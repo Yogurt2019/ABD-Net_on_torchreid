@@ -14,7 +14,7 @@ def argument_parser():
                         help="source datasets (delimited by space)")
     parser.add_argument('-t', '--target-names', type=str, nargs='+', default=['market1501'],
                         help="target datasets (delimited by space)")
-    parser.add_argument('-j', '--workers', default=8, type=int,
+    parser.add_argument('-j', '--workers', default=16, type=int,
                         help="number of data loading workers (tips: 4 or 8 times number of gpus)")
     parser.add_argument('--height', type=int, default=384,
                         help="height of an image")
@@ -24,7 +24,10 @@ def argument_parser():
                         help="split index (note: 0-based)")
     parser.add_argument('--train-sampler', type=str, default='RandomIdentitySampler',
                         help="sampler for trainloader")
-    parser.add_argument('--data-augment', type=str, nargs='+', choices=['none', 'crop', 'random-erase', 'color-jitter', 'crop,random-erase', 'crop,color-jitter', 'crop,color-jitter,random-erase'], default=['crop', 'random-erase'])
+    parser.add_argument('--data-augment', type=str, nargs='+',
+                        choices=['none', 'crop', 'random-erase', 'color-jitter', 'crop,random-erase',
+                                 'crop,color-jitter', 'crop,color-jitter,random-erase'],
+                        default=['crop', 'random-erase'])
     # ************************************************************
     # Video datasets
     # ************************************************************
@@ -82,9 +85,9 @@ def argument_parser():
     parser.add_argument('--gamma', default=0.1, type=float,
                         help="learning rate decay")
 
-    parser.add_argument('--train-batch-size', default=8, type=int,
+    parser.add_argument('--train-batch-size', default=64, type=int,
                         help="training batch size")
-    parser.add_argument('--test-batch-size', default=8, type=int,
+    parser.add_argument('--test-batch-size', default=64, type=int,
                         help="test batch size")
 
     parser.add_argument('--fixbase', action='store_true',
@@ -128,9 +131,10 @@ def argument_parser():
     # ************************************************************
     # Test settings
     # ************************************************************
-    parser.add_argument('--load-weights', type=str, default='',
+    parser.add_argument('--load-weights', type=str, default='/media/ddj2/8b1bfd93-3f3f-4475-b279-6a9ae59c6639/'
+                                                            'remote_dir/checkpoint/market_checkpoint_best.pth.tar',
                         help="load pretrained weights but ignore layers that don't match in size")
-    parser.add_argument('--evaluate', action='store_true',
+    parser.add_argument('--evaluate', type=bool, default=True,
                         help="evaluate only")
     parser.add_argument('--eval-freq', type=int, default=1,
                         help="evaluation frequency (set to -1 to test only in the end)")

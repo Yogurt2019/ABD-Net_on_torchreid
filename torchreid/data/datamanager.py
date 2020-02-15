@@ -5,6 +5,7 @@ from torchreid.data.sampler import build_train_sampler
 from torchreid.data.datasets import init_image_dataset, init_video_dataset
 from torchreid.data.transforms import build_transforms
 from torch.utils.data import DataLoader
+from torchvision.transforms import RandomHorizontalFlip
 
 
 class DataManager(object):
@@ -51,7 +52,7 @@ class DataManager(object):
         if isinstance(self.targets, str):
             self.targets = [self.targets]
 
-        self.transform_tr, self.transform_te = build_transforms(
+        self.transform_tr, self.transform_te, self.transform_fe = build_transforms(
             self.height,
             self.width,
             transforms=transforms,
@@ -253,14 +254,18 @@ class ImageDataManager(DataManager):
         self.test_loader = {
             name: {
                 'query': None,
-                'gallery': None
+                'gallery': None,
+                'query_flip': None,
+                'gallery_flip': None
             }
             for name in self.targets
         }
         self.test_dataset = {
             name: {
                 'query': None,
-                'gallery': None
+                'gallery': None,
+                'query_flip': None,
+                'gallery_flip': None
             }
             for name in self.targets
         }
@@ -308,6 +313,49 @@ class ImageDataManager(DataManager):
                 pin_memory=self.use_gpu,
                 drop_last=False
             )
+            # build flip query loader
+            flip_queryset = init_image_dataset(
+                name,
+                transform=self.transform_fe,
+                mode='query',
+                combineall=combineall,
+                root=root,
+                split_id=split_id,
+                cuhk03_labeled=cuhk03_labeled,
+                cuhk03_classic_split=cuhk03_classic_split,
+                market1501_500k=market1501_500k
+            )
+            self.test_loader[name]['query_flip'] = torch.utils.data.DataLoader(
+                flip_queryset,
+                batch_size=batch_size_test,
+                shuffle=False,
+                num_workers=workers,
+                pin_memory=self.use_gpu,
+                drop_last=False
+            )
+
+            # build gallery loader
+            flip_galleryset = init_image_dataset(
+                name,
+                transform=self.transform_fe,
+                mode='gallery',
+                combineall=combineall,
+                verbose=False,
+                root=root,
+                split_id=split_id,
+                cuhk03_labeled=cuhk03_labeled,
+                cuhk03_classic_split=cuhk03_classic_split,
+                market1501_500k=market1501_500k
+            )
+            self.test_loader[name]['gallery_flip'] = torch.utils.data.DataLoader(
+                flip_galleryset,
+                batch_size=batch_size_test,
+                shuffle=False,
+                num_workers=workers,
+                pin_memory=self.use_gpu,
+                drop_last=False
+            )
+
 
             self.test_dataset[name]['query'] = queryset.query
             self.test_dataset[name]['gallery'] = galleryset.gallery

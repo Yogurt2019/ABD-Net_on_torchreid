@@ -234,6 +234,7 @@ def build_transforms(
     transforms='random_flip',
     norm_mean=[0.485, 0.456, 0.406],
     norm_std=[0.229, 0.224, 0.225],
+    query_flip=True,
     **kwargs
 ):
     """Builds train and test transform functions.
@@ -273,9 +274,7 @@ def build_transforms(
 
     print('+ resize to {}x{}'.format(height, width))
     transform_tr += [Resize((height, width))]
-
     if 'random_flip' in transforms:
-        print('+ random flip')
         transform_tr += [RandomHorizontalFlip()]
 
     if 'random_crop' in transforms:
@@ -315,5 +314,11 @@ def build_transforms(
         ToTensor(),
         normalize,
     ])
+    transform_fe = Compose([
+        Resize((height, width)),
+        RandomHorizontalFlip(),
+        ToTensor(),
+        normalize,
+    ])
 
-    return transform_tr, transform_te
+    return transform_tr, transform_te, transform_fe
