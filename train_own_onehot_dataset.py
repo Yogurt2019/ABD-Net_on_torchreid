@@ -15,6 +15,7 @@ from torch.optim import lr_scheduler
 import torchvision.datasets as datasets
 from torchvision import transforms
 from torch.utils.data import DataLoader
+import torch.distributed as dist
 
 from args import optimizer_kwargs
 from torchreid import models
@@ -30,6 +31,8 @@ import matplotlib.pyplot as plt
 from matplotlib import cm
 from sklearn.manifold import TSNE
 import random
+from torchreid.data.sampler import RandomIdentitySampler
+from torch.utils.data.sampler import SequentialSampler
 
 import logging
 logging.basicConfig(level=os.environ.get('LOGLEVEL', 'CRITICAL'))
@@ -48,22 +51,23 @@ def main():
     parser.add_argument('--save-dir', type=str, default='/media/ddj2/ce611f70-968b-4316-9547-9bc9cf931d32/V20200108/torch_save_abd')
     parser.add_argument('--multiprocessing-distributed', type=bool, default=True)
     parser.add_argument('--distributed', type=bool, default=False)
-    parser.add_argument('--batch-size', type=int, default=8)
-    parser.add_argument('--num-classes', type=int, default=1001)
+    parser.add_argument('--batch-size', type=int, default=20)
+    parser.add_argument('--num-classes', type=int, default=70)
     parser.add_argument('--lr', type=float, default=0.001)
     parser.add_argument('--resume', type=str, default='', metavar='PATH')
     parser.add_argument('--start-epoch', type=int, default=0)
     parser.add_argument('--step-size', type=int, default=(20, 40))
     parser.add_argument('--num-workers', type=int, default=8)
-    parser.add_argument('--seed', type=int, default=0)
-    parser.add_argument('--fixbase-epoch', type=int, default=10)
+    parser.add_argument('--seed', type=int, default=None)
+    parser.add_argument('--fixbase', type=bool, default=False)
+    parser.add_argument('--fixbase-epoch', type=int, default=0)
     parser.add_argument('--start-eval', type=int, default=0)
-    parser.add_argument('--eval-freq', type=int, default=-1)
-    parser.add_argument('--dist-url', default='tcp://127.0.0.1:23456', type=str)
+    parser.add_argument('--eval-freq', type=int, default=1)
+    parser.add_argument('--dist-url', default='tcp://127.0.0.1:23458', type=str)
     parser.add_argument('--dist-backend', default='nccl', type=str)
     parser.add_argument('--open-layers', type=str, default=['classifier'])
     parser.add_argument('--max-epoch', type=int, default=80)
-    parser.add_argument('--rank', type=int, default=-1)
+    parser.add_argument('--rank', type=int, default=0)
     parser.add_argument('--world-size', type=int, default=1)
     parser.add_argument('--print-freq', type=int, default=10)
     parser.add_argument('--height', type=int, default=672)
@@ -114,19 +118,19 @@ def main():
     parser.add_argument('--of-position', nargs='+', type=str, default=['before', 'after', 'cam', 'pam', 'intermediate'])
     parser.add_argument('--use-ow', type=bool, default=True)
     parser.add_argument('--ow-beta', type=float, default=1e-3)
-    parser.add_argument('--arch', type=str, default='resnet50')
+    parser.add_argument('--arch', type=str, default='abd_resnet50')
     parser.add_argument('--flip-eval', type=bool, default=True)
 
     args = parser.parse_args()
-
-    random.seed(args.seed)
-    torch.manual_seed(args.seed)
-    # cudnn.deterministic = True
+    if args.seed is not None:
+        random.seed(args.seed)
+        torch.manual_seed(args.seed)
+        # cudnn.deterministic = True
+    args.distributed = args.world_size > 1 or args.multiprocessing_distributed
 
     ngpus_per_node = torch.cuda.device_count()
     if args.multiprocessing_distributed:
-        world_size = 1
-        world_size = ngpus_per_node * world_size
+        args.world_size = ngpus_per_node * args.world_size
         mp.spawn(main_worker, nprocs=ngpus_per_node, args=(ngpus_per_node, args))
     else:
         main_worker(args.gpu, ngpus_per_node, args)
@@ -141,7 +145,7 @@ def get_criterion(num_classes: int, use_gpu: bool, args):
     elif args.criterion == 'xent':
 
         from torchreid.losses.cross_entropy_loss import CrossEntropyLoss
-        criterion = CrossEntropyLoss(num_classes, use_gpu=use_gpu, label_smooth=args.label_smooth)
+        criterion = CrossEntropyLoss(num_classes, gpu=args.gpu, use_gpu=use_gpu, label_smooth=args.label_smooth)
     else:
         raise RuntimeError('Unknown criterion {}'.format(args.criterion))
 
@@ -152,9 +156,51 @@ def main_worker(gpu, ngpus_per_node, args):
     # Data-loader
     # TODO:args
     global best_acc1
+    os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu_devices
     args.gpu = gpu
     if args.gpu is not None:
         print("Use GPU: {} for training".format(args.gpu))
+
+    if args.distributed:
+        if args.dist_url == "env://" and args.rank == -1:
+            args.rank = int(os.environ["RANK"])
+        if args.multiprocessing_distributed:
+            # For multiprocessing distributed training, rank needs to be the
+            # global rank among all the processes
+            args.rank = args.rank * ngpus_per_node + gpu
+        dist.init_process_group(backend=args.dist_backend, init_method=args.dist_url,
+                                world_size=args.world_size, rank=args.rank)
+
+    # Initialize model
+    # models.resnet is the origin single-output resnet50
+    # models.abd_resnet is the multibranch resnet50 ==>ABD-Net
+    # here is the ABD-Net
+    model = models.build_model(name='abd_resnet50',
+                              num_classes=args.num_classes,
+                              loss={'xent'},
+                              use_gpu=True,
+                              args=vars(args))
+    print("Model size: {:.3f} M".format(count_num_param(model)))
+
+    if args.distributed:
+        if args.gpu is not None:
+            torch.cuda.set_device(args.gpu)
+            model.cuda(args.gpu)
+            args.batch_size = int(args.batch_size / ngpus_per_node)
+            args.num_workers = int((args.num_workers + ngpus_per_node - 1) / ngpus_per_node)
+            model = torch.nn.parallel.DataParallel(model, device_ids=[args.gpu])
+        else:
+            model.cuda()
+            model = torch.nn.parallel.DistributedDataParallel(model)
+    elif args.gpu is not None:
+        torch.cuda.set_device(args.gpu)
+        model = model.cuda(args.gpu)
+    else:
+        if args.arch.startswith('alexnet') or args.arch.startswith('vgg'):
+            model.features = torch.nn.DataParallel(model.features)
+            model.cuda()
+        else:
+            model = torch.nn.DataParallel(model).cuda()
 
     train_dir = osp.join(args.root, 'train')
     val_dir = osp.join(args.root, 'val')
@@ -182,45 +228,17 @@ def main_worker(gpu, ngpus_per_node, args):
         batch_size=args.batch_size,
         shuffle=(train_sampler is None),
         num_workers=args.num_workers,
-        sampler=train_sampler
+        sampler=train_sampler,
+        pin_memory=True
     )
     valloader = DataLoader(
         val_dataset,
         batch_size=args.batch_size,
         shuffle=False,
         num_workers=args.num_workers,
-        pin_memory=True
+        pin_memory=True,
+        sampler=SequentialSampler(val_dataset)
     )
-    # Initialize model
-    # models.resnet_orig is the origin single-output resnet50
-    # models.resnet is the multibranch resnet50 ==>ABD-Net
-    # here is the ABD-Net
-    model = models.build_model(name='abd_resnet50',
-                              num_classes=args.num_classes,
-                              loss={'xent'},
-                              use_gpu=True,
-                              args=vars(args))
-    print("Model size: {:.3f} M".format(count_num_param(model)))
-
-    if args.distributed:
-        if args.gpu is not None:
-            torch.cuda.set_device(args.gpu)
-            model.cuda(args.gpu)
-            args.batch_size = int(args.batch_size / ngpus_per_node)
-            args.workers = int((args.workers + ngpus_per_node - 1) / ngpus_per_node)
-            model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu])
-        else:
-            model.cuda()
-            model = torch.nn.parallel.DistributedDataParallel(model)
-    elif args.gpu is not None:
-        torch.cuda.set_device(args.gpu)
-        model = model.cuda(args.gpu)
-    else:
-        if args.arch.startswith('alexnet') or args.arch.startswith('vgg'):
-            model.features = torch.nn.DataParallel(model.features)
-            model.cuda()
-        else:
-            model = torch.nn.DataParallel(model).cuda()
 
     # Criterion, Regularizer, Optimizer, Scheduler
     criterion = get_criterion(num_classes=args.num_classes, use_gpu=True, args=args)
@@ -267,17 +285,20 @@ def main_worker(gpu, ngpus_per_node, args):
 
     for epoch in range(args.start_epoch, args.max_epoch):
         start_train_time = time.time()
+        if args.distributed:
+            train_sampler.set_epoch(epoch)
 
         train(epoch, model, criterion, regularizer, optimizer, trainloader, True, args, fixbase=False)
         train_time += round(time.time() - start_train_time)
 
         state_dict = model.module.state_dict()
-
-        save_checkpoint({
-            'state_dict': state_dict,
-            'rank1': 0,
-            'epoch': epoch,
-        }, osp.join(args.save_dir, 'checkpoint_ep' + str(epoch + 1) + '.pth.tar'), False)
+        if not args.multiprocessing_distributed or (args.multiprocessing_distributed
+                                                    and args.rank % ngpus_per_node == 0):
+            save_checkpoint({
+                'state_dict': state_dict,
+                'rank1': 0,
+                'epoch': epoch,
+            }, args.save_dir, False)
 
         scheduler.step()
 
@@ -285,7 +306,7 @@ def main_worker(gpu, ngpus_per_node, args):
                 epoch + 1) == args.max_epoch:
             print("==> Test")
             print("Evaluating ...")
-            acc1 = validate(valloader, model, criterion)
+            acc1 = validate(valloader, model, criterion, args)
             is_best = acc1 > best_acc1
             best_acc1 = max(acc1, best_acc1)
             state_dict = model.module.state_dict()
@@ -296,7 +317,7 @@ def main_worker(gpu, ngpus_per_node, args):
                         'state_dict': state_dict,
                         'best_acc1': best_acc1,
                         'epoch': epoch,
-                    }, osp.join(args.save_dir, 'checkpoint_best.pth.tar'), False)
+                    }, args.save_dir, is_best)
                     best_acc1 = acc1
 
     elapsed = round(time.time() - start_time)
@@ -338,7 +359,7 @@ def train(epoch, model, criterion, regularizer, optimizer, trainloader, use_gpu,
         outputs = model(imgs)
         loss = criterion(outputs, target)
         if not fixbase:
-            reg = regularizer(model)
+            reg = regularizer(model, args)
             loss += reg
         if not fixbase and args.use_of and epoch >= args.of_start_epoch:
             penalty = of_penalty(outputs)
@@ -381,7 +402,7 @@ def accuracy(output, target, topk=(1,)):
         return res
 
 
-def validate(val_loader, model, criterion):
+def validate(val_loader, model, criterion, args):
     losses = AverageMeter()
     top1 = AverageMeter()
     top5 = AverageMeter()
@@ -393,8 +414,8 @@ def validate(val_loader, model, criterion):
     with torch.no_grad():
         end = time.time()
         for i, (images, target) in enumerate(val_loader):
-            images = images.cuda()
-            target = target.cuda()
+            images = images.cuda(args.gpu)
+            target = target.cuda(args.gpu)
 
             output = model(images)
             loss = criterion(output, target)

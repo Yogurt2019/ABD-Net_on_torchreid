@@ -21,7 +21,8 @@ from .resnet_ibn_a import *
 from .resnet_ibn_b import *
 from .shufflenetv2 import *
 from .inceptionresnetv2 import *
-from .resnet_orig import *
+from .resnet import *
+from .abd_resnet import *
 
 
 __model_factory = {

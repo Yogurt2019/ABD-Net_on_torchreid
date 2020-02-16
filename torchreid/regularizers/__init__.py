@@ -27,9 +27,8 @@ class ConvRegularizer(nn.Module):
         if isinstance(module, nn.Conv2d):
             yield module
 
-    def forward(self, net, ignore=False):
-
-        accumulator = torch.tensor(0.0).cuda()
+    def forward(self, net, args, ignore=False):
+        accumulator = torch.tensor(0.0).cuda(args.gpu)
 
         if ignore:
             return accumulator
