@@ -64,11 +64,10 @@ class ABD_TripletLoss(nn.Module):
         margin = args['margin']
         self.margin = margin
         self.ranking_loss = nn.MarginRankingLoss(margin=margin)
-        self.gpu = args['gpu']
 
         from .cross_entropy_loss import ABD_CrossEntropyLoss
         self.xent = ABD_CrossEntropyLoss(num_classes=num_classes, use_gpu=use_gpu,
-                                         label_smooth=args['label_smooth'], gpu=self.gpu)
+                                         label_smooth=args['label_smooth'])
         self.lambda_xent = args['lambda_xent']
         self.lambda_htri = args['lambda_htri']
 
@@ -83,7 +82,7 @@ class ABD_TripletLoss(nn.Module):
         return results / len(inputs_tuple)
 
     def forward(self, inputs, targets):
-        xent_loss = self.xent(inputs, targets, self.gpu)
+        xent_loss = self.xent(inputs, targets)
         htri_loss = self._forward(inputs[2], targets)
 
         return self.lambda_xent * xent_loss + self.lambda_htri * htri_loss

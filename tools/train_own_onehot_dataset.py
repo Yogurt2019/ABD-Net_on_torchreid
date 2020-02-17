@@ -68,6 +68,7 @@ def main():
     parser.add_argument('--open-layers', type=str, default=['classifier'])
     parser.add_argument('--max-epoch', type=int, default=80)
     parser.add_argument('--rank', type=int, default=0)
+    parser.add_argument('--local-rank', type=int, default=0)
     parser.add_argument('--world-size', type=int, default=1)
     parser.add_argument('--print-freq', type=int, default=10)
     parser.add_argument('--height', type=int, default=672)
@@ -188,7 +189,7 @@ def main_worker(gpu, ngpus_per_node, args):
             model.cuda(args.gpu)
             args.batch_size = int(args.batch_size / ngpus_per_node)
             args.num_workers = int((args.num_workers + ngpus_per_node - 1) / ngpus_per_node)
-            model = torch.nn.parallel.DataParallel(model, device_ids=[args.gpu])
+            model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu])
         else:
             model.cuda()
             model = torch.nn.parallel.DistributedDataParallel(model)

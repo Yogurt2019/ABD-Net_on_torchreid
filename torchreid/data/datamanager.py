@@ -5,7 +5,6 @@ from torchreid.data.sampler import build_train_sampler
 from torchreid.data.datasets import init_image_dataset, init_video_dataset
 from torchreid.data.transforms import build_transforms
 from torch.utils.data import DataLoader
-from torchvision.transforms import RandomHorizontalFlip
 
 
 class DataManager(object):
@@ -160,7 +159,7 @@ class ImageDataManager(DataManager):
         batch_size_test=32,
         workers=4,
         num_instances=4,
-        train_sampler='RandomIdentitySampler',
+        train_sampler='RandomSampler',
         cuhk03_labeled=False,
         cuhk03_classic_split=False,
         market1501_500k=False

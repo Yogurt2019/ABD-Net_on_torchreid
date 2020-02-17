@@ -15,6 +15,8 @@ from torch.optim import lr_scheduler
 from tools.plot_tsne import plot_tsne
 from args import argument_parser, image_dataset_kwargs, optimizer_kwargs
 from torchreid.data.datamanager import ImageDataManager
+from torchreid.data import register_image_dataset
+from torchreid.data.datasets.image.rock_dataset import RockDataSet
 from torchreid import models
 from torchreid.utils.tools import check_isfile
 from torchreid.utils.avgmeter import AverageMeter
@@ -73,6 +75,7 @@ def main():
         print("Currently using CPU, however, GPU is highly recommended")
 
     print("Initializing image data manager")
+    register_image_dataset('rock_dataset', RockDataSet)
     dm = ImageDataManager(**image_dataset_kwargs(args))
     trainloader, testloader_dict = dm.train_loader, dm.test_loader
 
@@ -170,7 +173,7 @@ def main():
             'state_dict': state_dict,
             'rank1': 0,
             'epoch': epoch,
-        }, osp.join(args.save_dir, 'checkpoint_ep' + str(epoch + 1) + '.pth.tar'), False)
+        }, args.save_dir, False)
 
         scheduler.step()
 

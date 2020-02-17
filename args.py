@@ -8,17 +8,17 @@ def argument_parser():
     # ************************************************************
     # Datasets (general)
     # ************************************************************
-    parser.add_argument('--root', type=str, default='/media/ddj2/ce611f70-968b-4316-9547-9bc9cf931d32/remote_data/',
-                        help="root path to data directory")
-    parser.add_argument('-s', '--source-names', type=str, nargs='+', default=['market1501'],
+    parser.add_argument('--root', type=str, default='/media/ddj2/ce611f70-968b-4316-9547-9bc9cf931d32/V20200108/zhejiang_train')
+    # parser.add_argument('--root', type=str, default='/media/ddj2/ce611f70-968b-4316-9547-9bc9cf931d32/remote_data')
+    parser.add_argument('-s', '--source-names', type=str, nargs='+', default=['rock_dataset'],
                         help="source datasets (delimited by space)")
-    parser.add_argument('-t', '--target-names', type=str, nargs='+', default=['market1501'],
+    parser.add_argument('-t', '--target-names', type=str, nargs='+', default=['rock_dataset'],
                         help="target datasets (delimited by space)")
     parser.add_argument('-j', '--workers', default=16, type=int,
                         help="number of data loading workers (tips: 4 or 8 times number of gpus)")
-    parser.add_argument('--height', type=int, default=384,
+    parser.add_argument('--height', type=int, default=672,
                         help="height of an image")
-    parser.add_argument('--width', type=int, default=128,
+    parser.add_argument('--width', type=int, default=672,
                         help="width of an image")
     parser.add_argument('--split-id', type=int, default=0,
                         help="split index (note: 0-based)")
@@ -80,18 +80,17 @@ def argument_parser():
                         help="maximum epochs to run")
     parser.add_argument('--start-epoch', default=0, type=int,
                         help="manual epoch number (useful when restart)")
-    parser.add_argument('--stepsize', default=[20, 40], nargs='+', type=int,
+    parser.add_argument('--stepsize', default=[30, 60], nargs='+', type=int,
                         help="stepsize to decay learning rate")
     parser.add_argument('--gamma', default=0.1, type=float,
                         help="learning rate decay")
 
-    parser.add_argument('--train-batch-size', default=64, type=int,
+    parser.add_argument('--train-batch-size', default=32, type=int,
                         help="training batch size")
-    parser.add_argument('--test-batch-size', default=64, type=int,
+    parser.add_argument('--test-batch-size', default=32, type=int,
                         help="test batch size")
 
-    parser.add_argument('--fixbase', action='store_true',
-                        help="always fix base network")
+    parser.add_argument('--fixbase', default=True)
     parser.add_argument('--fixbase-epoch', type=int, default=10,
                         help="how many epochs to fix base network (only train randomly initialized classifier)")
     parser.add_argument('--open-layers', type=str, nargs='+', default=['classifier'],
@@ -134,7 +133,7 @@ def argument_parser():
     parser.add_argument('--load-weights', type=str, default='/media/ddj2/8b1bfd93-3f3f-4475-b279-6a9ae59c6639/'
                                                             'remote_dir/checkpoint/market_checkpoint_best.pth.tar',
                         help="load pretrained weights but ignore layers that don't match in size")
-    parser.add_argument('--evaluate', type=bool, default=True,
+    parser.add_argument('--evaluate', type=bool, default=False,
                         help="evaluate only")
     parser.add_argument('--eval-freq', type=int, default=1,
                         help="evaluation frequency (set to -1 to test only in the end)")
